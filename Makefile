@@ -2,7 +2,7 @@ cc = gcc
 ld = gcc
 include_dir = ./
 cflags = -O0 -I$(include_dir)#-lpthread -mavx512f
-ldflags = -lm -lc -fsanitize=address# -lcrypto -lssl
+ldflags = -lm -lc #-fsanitize=address# -lcrypto -lssl
 
 all: server client
 # server: ./server

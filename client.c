@@ -5,9 +5,11 @@
 #include <inttypes.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
+#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <unistd.h>
+#include <libgen.h>
 #include <string.h>
 
 #define SERVER_PORT 55763
@@ -26,48 +28,74 @@ int main()
 
 	char msg[255] = {0};
 	char buff[256] = {0};
+	// sprintf(msg + 1, "%s", "/home/wokzy/films/Dexter.s4.BDRip.1080p/Dexter.s04e01.Living.the.Dream.mkv");
 	sprintf(msg + 1, "%s", "./test_2.txt");
 	send(sock, msg, strlen(msg + 1) + 1, 0);
 
-	recv(sock, buff, 1, 0);
+	recv(sock, buff, 1 + 2*sizeof(int), 0);
 	if (buff[0] != 1) {
 		puts("Error on server side");
 		return 0;
 	}
 
-	FILE *res_file = fopen("recieved.txt", "w");
+	int total_files = *(int*)(buff + 1);
 
-	clock_t start_clock = clock();
-	size_t counter = 0;
-	float speed = 0.0;
+	printf("total files: %d\n", total_files);
 
-	while (1) {
-		// printf("-> ");
-		// scanf("%s", msg);
-
-		// send(sock, msg, strlen(msg), 0);
-		ssize_t total = recv(sock, buff, 255, 0);
-		counter++;
-
-		// printf("\rrecieving: %s    speed: %f mb/s", msg + 1, speed);
-		fwrite(buff, strlen(buff), 1, res_file);
-		if (strlen(buff) < 255){
-			fclose(res_file);
-			break;
-		}
-
-		if (counter == 4096) {
-			printf("\rrecieving: %s    speed: %9.2f mb/s", msg + 1, speed);
-			clock_t end_clock = clock();
-			speed = (1.0f / ((float) (end_clock - start_clock) / (float) (CLOCKS_PER_SEC)));
-			start_clock = end_clock;
-			counter = 0;
-
-		}
-
-		// memset(msg, 0, 255);
+	msg[0] = 1;
+	for (int i = 0; i < total_files; i++) {
+		send(sock, msg, 1, 0);
+		char fname[256] = {0};
 		memset(buff, 0, 255);
+		recv(sock, fname, 255, 0);
+
+		send(sock, msg, 1, 0);
+		recv(sock, buff, sizeof(size_t), 0);
+
+		size_t file_size = *(size_t*)buff;
+		send(sock, msg, 1, 0);
+
+		printf("%s %zu\n", fname, file_size);
+		return 0;
+
+		FILE *res_file = fopen(fname, "w");
+
+		clock_t start_clock = clock();
+		size_t counter = 0;
+		size_t counter_2 = 0;
+		float speed = 0.0;
+
+		size_t total_recieved = 0;
+
+		memset(buff, 0, 255);
+		while (1) {
+			ssize_t total = recv(sock, buff, 255, 0);
+			total_recieved += total;
+			counter++;
+
+			fwrite(buff, total, 1, res_file);
+			if (total_recieved == file_size){
+				fclose(res_file);
+				printf("\r%s    speed: %9.2f mb/s    100%%", fname, speed);
+				break;
+			}
+
+			if (counter == 4096) {
+				clock_t end_clock = clock();
+				speed = (1.0 / ((float) (end_clock - start_clock) / (float) (CLOCKS_PER_SEC))) / 3;
+				// counter_2++;
+				printf("\rrecieving: %s    speed: %9.2f mb/s    %zu%%", "movie", speed, 100*(total_recieved / file_size));
+
+				start_clock = end_clock;
+				counter = 0;
+			}
+
+			// memset(msg, 0, 255);
+			memset(buff, 0, 255);
+		}
+		puts("");
 	}
+	close(sock);
 
 	return 0;
 }

@@ -8,8 +8,13 @@
 enum client_state {
 	INIT,
 	INIT_TRANSMITTING,
-	INIT_RECIEVING,
-	RECIEVING,
+	WAITING1,
+	INIT_TRANSMITTING2,
+	WAITING2,
+	INIT_TRANSMITTING3,
+	WAITING3,
+	// INIT_RECIEVING,
+	// RECIEVING,
 	TRANSMITTING,
 	FINISHING,
 	ERROR
@@ -20,11 +25,12 @@ typedef struct
 	int fd;
 	int inactivity_counter; // if this field reaches 5, connection will be dropped.
 	enum client_state state;
-	size_t total_files;
-	size_t files_sent; // in case of transmitting
+	int total_files;
+	int files_sent; // in case of transmitting
 	char **files_list;
 	int file_descriptor;
-	char *destination; // in case of recieving
+	size_t file_size;
+	// char *destination; // in case of recieving
 } SOCK_CTX;
 
 typedef struct
@@ -45,4 +51,4 @@ void ctx_add(CTX *ctx, int sock);
 void ctx_remove(CTX *ctx, size_t index);
 void ctx_destroy(CTX *ctx);
 
-int read_dir_content(SOCK_CTX *, const char *);
+void read_dir_content(SOCK_CTX *, const char *);

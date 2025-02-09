@@ -12,6 +12,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <libgen.h>
+#include <sys/stat.h>
 #include <sys/sendfile.h>
 
 #include "misc.h"
@@ -133,15 +135,18 @@ void client_disconenect(CTX *ctx, size_t index)
 	ctx_remove(ctx, index);
 }
 
-// int read_dir_content(SOCK_CTX *socket_ctx, const char *dir) {
-// 	DIR *directory = opendir(dir);
-// 	if (directory == NULL)
-// 		return -1;
+void read_dir_content(SOCK_CTX *socket_ctx, const char *dir) {
+	DIR *directory = opendir(dir);
+	// if (directory == NULL)
+	// 	return -1;
 
-// 	socket_ctx
+	socket_ctx->total_files = 1;
+	socket_ctx->files_list = nc_calloc(socket_ctx->total_files, sizeof(char*));
+	for (size_t i = 0; i < 1; i++)
+		socket_ctx->files_list[i] = nc_calloc(255, sizeof(char));
 
-// 	return 0;
-// }
+	memcpy(socket_ctx->files_list[0], dir, strlen(dir));
+}
 
 // TEMPORARY
 int init_file(SOCK_CTX *socket_ctx, const char *fname, int mode) {
@@ -149,6 +154,10 @@ int init_file(SOCK_CTX *socket_ctx, const char *fname, int mode) {
 	if (mode == 0) {
 		if (access(fname, F_OK) != 0)
 			return -1;
+
+		struct stat info;
+		stat(fname, &info);
+		socket_ctx->file_size = (size_t)info.st_size;
 		socket_ctx->file_descriptor = open(fname, O_RDONLY);
 	}
 	else {
@@ -158,14 +167,9 @@ int init_file(SOCK_CTX *socket_ctx, const char *fname, int mode) {
 		return -1;
 	}
 
-	puts("file initted");
+	// puts("file initted");
 
 	return 0;
-}
-
-void transmit_file(SOCK_CTX *socket_ctx) {
-	// char buff[255];
-	return;
 }
 
 
@@ -225,14 +229,23 @@ int main()
 				printf("new message (%zd): %s\n", __total, buff + 1);
 				if (ctx->sockets[i].state == INIT) {
 					if (buff[0] == 0) {
-						// read_dir_content(ctx->sockets + i, buff + 1);
-						if (init_file(ctx->sockets + i, buff + 1, 0) == -1)
-							ctx->sockets[i].state = ERROR;
-						else
-							ctx->sockets[i].state = INIT_TRANSMITTING;
-						printf("%d\n", ctx->sockets[i].state == INIT_TRANSMITTING);
+						read_dir_content(ctx->sockets + i, buff + 1);
+						ctx->sockets[i].state = INIT_TRANSMITTING;
 					} else {
 						goto client_disconenection;
+					}
+				} else if (ctx->sockets[i].state == WAITING1) {
+					ctx->sockets[i].state = INIT_TRANSMITTING2;
+				} else if (ctx->sockets[i].state == WAITING2) {
+					init_file(ctx->sockets + i, ctx->sockets[i].files_list[ctx->sockets[i].files_sent], 0);
+					ctx->sockets[i].state = INIT_TRANSMITTING3;
+				} else if (ctx->sockets[i].state == WAITING3) {
+					ctx->sockets[i].state = TRANSMITTING;
+				} else if (ctx->sockets[i].state == TRANSMITTING) {
+					if (ctx->sockets[i].files_sent++ == ctx->sockets[i].total_files) {
+						goto client_disconenection;
+					} else {
+						ctx->sockets[i].state = INIT_TRANSMITTING2;
 					}
 				}
 				memset(buff, 0, sizeof(buff));
@@ -240,20 +253,39 @@ int main()
 
 			if (ctx->poll_fds[i].revents & POLLOUT) {
 				// printf("%d\n", ctx->sockets[i].state);
-				char res[1] = {0};
+				char res[256] = {0};
 				switch (ctx->sockets[i].state){
 					case INIT_TRANSMITTING:
 						res[0] = 1;
-						write(ctx->poll_fds[i].fd, res, 1);
-						ctx->sockets[i].state = TRANSMITTING;
+						*(int*)(res + 1) = ctx->sockets[i].total_files;
+						// read_dir_content(ctx->sockets + i, );
+						// struct stat info;
+						// stat(argv[1], &info);
+
+						write(ctx->poll_fds[i].fd, res, 1 + sizeof(int));
+						ctx->sockets[i].state = WAITING1;
+						break;
+					case INIT_TRANSMITTING2:
+						sprintf(res, "%s", basename(ctx->sockets[i].files_list[ctx->sockets[i].files_sent]));
+						printf("%s\n", res);
+						write(ctx->poll_fds[i].fd, res, 1 + strlen(res));
+						ctx->sockets[i].state = WAITING2;
+						break;
+					case INIT_TRANSMITTING3:
+						*(size_t*)(res) = ctx->sockets[i].file_size;
+						write(ctx->poll_fds[i].fd, res, sizeof(size_t));
+						printf("%zu\n", ctx->sockets[i].file_size);
+						ctx->sockets[i].state = WAITING3;
 						break;
 					case ERROR:
 						res[0] = -1;
 						write(ctx->poll_fds[i].fd, res, 1);
 						goto client_disconenection;
 					case FINISHING:
+						res[0] = 0;
 						write(ctx->poll_fds[i].fd, res, 1);
-						goto client_disconenection;
+						// goto client_disconenection;
+						break;
 					case TRANSMITTING:
 						// transmit_file(ctx->sockets + i);
 						sendfile(ctx->poll_fds[i].fd, ctx->sockets[i].file_descriptor, NULL, 255);
