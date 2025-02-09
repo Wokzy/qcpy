@@ -10,6 +10,9 @@
 #include <poll.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <sys/sendfile.h>
 
 #include "misc.h"
 #include "server.h"
@@ -43,6 +46,7 @@ void ctx_add(CTX *ctx, int sock)
 
 	ctx->sockets[ctx->size].fd = sock;
 	ctx->sockets[ctx->size].inactivity_counter = 0;
+	ctx->sockets[ctx->size].state = INIT;
 	ctx->poll_fds[ctx->size].fd = sock;
 	ctx->poll_fds[ctx->size].events = POLLIN | POLLOUT;
 	ctx->size++;
@@ -51,6 +55,16 @@ void ctx_add(CTX *ctx, int sock)
 void ctx_remove(CTX *ctx, size_t index)
 {
 	ctx->size--;
+
+	if (ctx->sockets[index].files_list != NULL) {
+		for (size_t i = 0; i < ctx->sockets[index].total_files; i++)
+			free(ctx->sockets[index].files_list[i]);
+		free(ctx->sockets[index].files_list);
+	}
+
+	if (ctx->sockets[index].file_descriptor > 0) {
+		close(ctx->sockets[index].file_descriptor);
+	}
 
 	memmove(ctx->sockets + index,
 			ctx->sockets + (index + 1),
@@ -119,6 +133,41 @@ void client_disconenect(CTX *ctx, size_t index)
 	ctx_remove(ctx, index);
 }
 
+// int read_dir_content(SOCK_CTX *socket_ctx, const char *dir) {
+// 	DIR *directory = opendir(dir);
+// 	if (directory == NULL)
+// 		return -1;
+
+// 	socket_ctx
+
+// 	return 0;
+// }
+
+// TEMPORARY
+int init_file(SOCK_CTX *socket_ctx, const char *fname, int mode) {
+
+	if (mode == 0) {
+		if (access(fname, F_OK) != 0)
+			return -1;
+		socket_ctx->file_descriptor = open(fname, O_RDONLY);
+	}
+	else {
+		socket_ctx->file_descriptor = open(fname, O_WRONLY | O_CREAT);
+		if (socket_ctx->file_descriptor == -1)
+			return -1;
+		return -1;
+	}
+
+	puts("file initted");
+
+	return 0;
+}
+
+void transmit_file(SOCK_CTX *socket_ctx) {
+	// char buff[255];
+	return;
+}
+
 
 int main()
 {
@@ -139,7 +188,7 @@ int main()
 	listen(ctx->server_sock, 5);
 	const char *response_str = "ack popopo";
 
-	char buff[255] = {0};
+	char buff[MAX_MSG_LENGTH] = {0};
 	// struct pollfd poll_fd = {
 	// 	.fd = new_socket,
 	// 	.events = POLLIN,
@@ -157,37 +206,67 @@ int main()
 		// printf("%zu\n", ctx->size);
 		for (size_t i = 0; i < ctx->size; i++) {
 			if ((ctx->poll_fds[i].revents & POLLERR) || (ctx->poll_fds[i].revents & POLLHUP) || (ctx->poll_fds[i].revents & POLLNVAL)) {
-				client_disconenect(ctx, i);
-				i--;
-				continue;
+				goto client_disconenection;
 			}
 
 			if (ctx->poll_fds[i].revents & POLLIN) {
-				// puts("423423");
 				ssize_t __total = recv(ctx->poll_fds[i].fd, buff, sizeof(buff), 0); // MSG_DONTWAIT
-				// read(ctx->poll_fds[i].fd, buff, sizeof(buff));
 				if (__total == -1) {
-					client_disconenect(ctx, i);
-					i--;
-					continue;
+					goto client_disconenection;
 				}
 				if (__total == 0) {
-					if (++ctx->sockets[i].inactivity_counter == 5) {
-						client_disconenect(ctx, i);
-						i--;
-						continue;
-					}
+					if (++ctx->sockets[i].inactivity_counter == 5)
+						goto client_disconenection;
+					continue;
 				} else {
 					ctx->sockets[i].inactivity_counter = 0;
 				}
-				printf("new message (%zd): %s\n", __total, buff);
+
+				printf("new message (%zd): %s\n", __total, buff + 1);
+				if (ctx->sockets[i].state == INIT) {
+					if (buff[0] == 0) {
+						// read_dir_content(ctx->sockets + i, buff + 1);
+						if (init_file(ctx->sockets + i, buff + 1, 0) == -1)
+							ctx->sockets[i].state = ERROR;
+						else
+							ctx->sockets[i].state = INIT_TRANSMITTING;
+						printf("%d\n", ctx->sockets[i].state == INIT_TRANSMITTING);
+					} else {
+						goto client_disconenection;
+					}
+				}
 				memset(buff, 0, sizeof(buff));
 			}
 
 			if (ctx->poll_fds[i].revents & POLLOUT) {
-				write(ctx->poll_fds[i].fd, response_str, 10); // 10 is hardcoded!
+				// printf("%d\n", ctx->sockets[i].state);
+				char res[1] = {0};
+				switch (ctx->sockets[i].state){
+					case INIT_TRANSMITTING:
+						res[0] = 1;
+						write(ctx->poll_fds[i].fd, res, 1);
+						ctx->sockets[i].state = TRANSMITTING;
+						break;
+					case ERROR:
+						res[0] = -1;
+						write(ctx->poll_fds[i].fd, res, 1);
+						goto client_disconenection;
+					case FINISHING:
+						write(ctx->poll_fds[i].fd, res, 1);
+						goto client_disconenection;
+					case TRANSMITTING:
+						// transmit_file(ctx->sockets + i);
+						sendfile(ctx->poll_fds[i].fd, ctx->sockets[i].file_descriptor, NULL, 255);
+						break;
+				}
+				// write(ctx->poll_fds[i].fd, response_str, 10); // 10 is hardcoded!
 			}
 			ctx->poll_fds[i].revents = 0;
+
+			continue;
+			client_disconenection:
+				client_disconenect(ctx, i);
+				i--;
 		}
 
 		usleep(200000);
