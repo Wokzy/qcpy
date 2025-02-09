@@ -144,7 +144,7 @@ void read_dir_content(SOCK_CTX *socket_ctx, const char *dir) {
 	glob_t globbuf;
 	glob(dir, 0, NULL, &globbuf);
 	socket_ctx->files_list = globbuf.gl_pathv;
-	puts(socket_ctx->files_list[0]);
+	// puts(socket_ctx->files_list[0]);
 
 	socket_ctx->total_files = (int)(globbuf.gl_pathc);
 	// socket_ctx->files_list = nc_calloc(socket_ctx->total_files, sizeof(char*));
@@ -293,7 +293,7 @@ int main()
 						break;
 					case TRANSMITTING:
 						// transmit_file(ctx->sockets + i);
-						sendfile(ctx->poll_fds[i].fd, ctx->sockets[i].file_descriptor, NULL, 255);
+						sendfile(ctx->poll_fds[i].fd, ctx->sockets[i].file_descriptor, NULL, TRANSMIT_BUFF_SIZE);
 						break;
 				}
 				// write(ctx->poll_fds[i].fd, response_str, 10); // 10 is hardcoded!
