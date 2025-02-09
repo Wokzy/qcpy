@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <netinet/ip.h>
+#include <glob.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -140,12 +141,17 @@ void read_dir_content(SOCK_CTX *socket_ctx, const char *dir) {
 	// if (directory == NULL)
 	// 	return -1;
 
-	socket_ctx->total_files = 1;
-	socket_ctx->files_list = nc_calloc(socket_ctx->total_files, sizeof(char*));
-	for (size_t i = 0; i < 1; i++)
-		socket_ctx->files_list[i] = nc_calloc(255, sizeof(char));
+	glob_t globbuf;
+	glob(dir, 0, NULL, &globbuf);
+	socket_ctx->files_list = globbuf.gl_pathv;
+	puts(socket_ctx->files_list[0]);
 
-	memcpy(socket_ctx->files_list[0], dir, strlen(dir));
+	socket_ctx->total_files = (int)(globbuf.gl_pathc);
+	// socket_ctx->files_list = nc_calloc(socket_ctx->total_files, sizeof(char*));
+	// for (size_t i = 0; i < 1; i++)
+	// 	socket_ctx->files_list[i] = nc_calloc(255, sizeof(char));
+
+	// memcpy(socket_ctx->files_list[0], dir, strlen(dir));
 }
 
 // TEMPORARY
@@ -226,7 +232,7 @@ int main()
 					ctx->sockets[i].inactivity_counter = 0;
 				}
 
-				printf("new message (%zd): %s\n", __total, buff + 1);
+				// printf("new message (%zd): %s\n", __total, buff + 1);
 				if (ctx->sockets[i].state == INIT) {
 					if (buff[0] == 0) {
 						read_dir_content(ctx->sockets + i, buff + 1);
@@ -242,6 +248,7 @@ int main()
 				} else if (ctx->sockets[i].state == WAITING3) {
 					ctx->sockets[i].state = TRANSMITTING;
 				} else if (ctx->sockets[i].state == TRANSMITTING) {
+					close(ctx->sockets[i].file_descriptor);
 					if (ctx->sockets[i].files_sent++ == ctx->sockets[i].total_files) {
 						goto client_disconenection;
 					} else {
@@ -267,14 +274,12 @@ int main()
 						break;
 					case INIT_TRANSMITTING2:
 						sprintf(res, "%s", basename(ctx->sockets[i].files_list[ctx->sockets[i].files_sent]));
-						printf("%s\n", res);
 						write(ctx->poll_fds[i].fd, res, 1 + strlen(res));
 						ctx->sockets[i].state = WAITING2;
 						break;
 					case INIT_TRANSMITTING3:
 						*(size_t*)(res) = ctx->sockets[i].file_size;
 						write(ctx->poll_fds[i].fd, res, sizeof(size_t));
-						printf("%zu\n", ctx->sockets[i].file_size);
 						ctx->sockets[i].state = WAITING3;
 						break;
 					case ERROR:

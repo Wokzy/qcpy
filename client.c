@@ -29,7 +29,7 @@ int main()
 	char msg[255] = {0};
 	char buff[256] = {0};
 	// sprintf(msg + 1, "%s", "/home/wokzy/films/Dexter.s4.BDRip.1080p/Dexter.s04e01.Living.the.Dream.mkv");
-	sprintf(msg + 1, "%s", "./test_2.txt");
+	sprintf(msg + 1, "%s", "./test_*.txt");
 	send(sock, msg, strlen(msg + 1) + 1, 0);
 
 	recv(sock, buff, 1 + 2*sizeof(int), 0);
@@ -46,8 +46,10 @@ int main()
 	for (int i = 0; i < total_files; i++) {
 		send(sock, msg, 1, 0);
 		char fname[256] = {0};
+		fname[0] = 'r';
+		fname[1] = '_';
 		memset(buff, 0, 255);
-		recv(sock, fname, 255, 0);
+		recv(sock, fname + 2, 253, 0);
 
 		send(sock, msg, 1, 0);
 		recv(sock, buff, sizeof(size_t), 0);
@@ -55,8 +57,7 @@ int main()
 		size_t file_size = *(size_t*)buff;
 		send(sock, msg, 1, 0);
 
-		printf("%s %zu\n", fname, file_size);
-		return 0;
+		// printf("%s %zu\n", fname, file_size);
 
 		FILE *res_file = fopen(fname, "w");
 
@@ -76,6 +77,7 @@ int main()
 			fwrite(buff, total, 1, res_file);
 			if (total_recieved == file_size){
 				fclose(res_file);
+				printf("\33[2K\r");
 				printf("\r%s    speed: %9.2f mb/s    100%%", fname, speed);
 				break;
 			}
@@ -84,7 +86,8 @@ int main()
 				clock_t end_clock = clock();
 				speed = (1.0 / ((float) (end_clock - start_clock) / (float) (CLOCKS_PER_SEC))) / 3;
 				// counter_2++;
-				printf("\rrecieving: %s    speed: %9.2f mb/s    %zu%%", "movie", speed, 100*(total_recieved / file_size));
+				// printf("\33[2K\r");
+				printf("\rrecieving: %s    speed: %9.2f mb/s    %zu%%", fname, speed, (100*total_recieved) / file_size);
 
 				start_clock = end_clock;
 				counter = 0;
@@ -95,6 +98,7 @@ int main()
 		}
 		puts("");
 	}
+	send(sock, msg, 1, 0);
 	close(sock);
 
 	return 0;
