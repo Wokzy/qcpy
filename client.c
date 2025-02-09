@@ -31,7 +31,7 @@ int main()
 
 		send(sock, msg, strlen(msg), 0);
 		recv(sock, buff, 10, 0);
-		printf("recieved: %s", buff);
+		printf("recieved: %s\n", buff);
 		memset(msg, 0, 255);
 		memset(buff, 0, 11);
 	}
