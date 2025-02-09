@@ -269,7 +269,7 @@ int main()
 				i--;
 		}
 
-		usleep(200000);
+		// usleep(200000);
 	}
 
 	shutdown(ctx->server_sock, SHUT_RDWR);

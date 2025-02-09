@@ -1,4 +1,5 @@
 
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -25,7 +26,7 @@ int main()
 
 	char msg[255] = {0};
 	char buff[256] = {0};
-	sprintf(msg + 1, "%s", "./test_1.txt");
+	sprintf(msg + 1, "%s", "./test_2.txt");
 	send(sock, msg, strlen(msg + 1) + 1, 0);
 
 	recv(sock, buff, 1, 0);
@@ -36,18 +37,32 @@ int main()
 
 	FILE *res_file = fopen("recieved.txt", "w");
 
+	clock_t start_clock = clock();
+	size_t counter = 0;
+	float speed = 0.0;
+
 	while (1) {
 		// printf("-> ");
 		// scanf("%s", msg);
 
 		// send(sock, msg, strlen(msg), 0);
 		ssize_t total = recv(sock, buff, 255, 0);
+		counter++;
 
-		printf("recieved: %s\n", buff);
+		// printf("\rrecieving: %s    speed: %f mb/s", msg + 1, speed);
 		fwrite(buff, strlen(buff), 1, res_file);
 		if (strlen(buff) < 255){
 			fclose(res_file);
 			break;
+		}
+
+		if (counter == 4096) {
+			printf("\rrecieving: %s    speed: %9.2f mb/s", msg + 1, speed);
+			clock_t end_clock = clock();
+			speed = (1.0f / ((float) (end_clock - start_clock) / (float) (CLOCKS_PER_SEC)));
+			start_clock = end_clock;
+			counter = 0;
+
 		}
 
 		// memset(msg, 0, 255);
