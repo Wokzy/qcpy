@@ -41,7 +41,6 @@ int main(int argc, const char *argv[])
 
 	char msg[255] = {0};
 	char *buff = nc_calloc(TRANSMIT_BUFF_SIZE + 1, sizeof(char));
-	// sprintf(msg + 1, "%s", "/home/wokzy/films/Dexter.s4.BDRip.1080p/Dexter.s04e01.Living.the.Dream.mkv");
 	sprintf(msg + 1, "%s", argv[2]);
 	send(sock, msg, strlen(msg + 1) + 1, 0);
 
@@ -69,8 +68,6 @@ int main(int argc, const char *argv[])
 
 		size_t file_size = *(size_t*)buff;
 		send(sock, msg, 1, 0);
-
-		// printf("%s %zu\n", fname, file_size);
 
 		FILE *res_file = fopen(fname, "w");
 
@@ -100,14 +97,12 @@ int main(int argc, const char *argv[])
 				clock_t end_clock = clock();
 				speed = (counter_2 >> 20) * (1.0 / ((float) (end_clock - start_clock) / (float) (CLOCKS_PER_SEC))) / 3;
 				counter_2 = 0;
-				// printf("\33[2K\r");
 				printf("\rrecieving: %s    speed: %9.2f mb/s    %zu%%", fname, speed, (100*total_recieved) / file_size);
 
 				start_clock = end_clock;
 				counter = 0;
 			}
 
-			// memset(msg, 0, 255);
 			memset(buff, 0, TRANSMIT_BUFF_SIZE);
 		}
 		puts("");
